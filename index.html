@@ -50,7 +50,7 @@
 
   <div class="ui">
     <div id="score" class="score">Score: 0</div>
-    <!-- Player Spotify della traccia indicata -->
+    <!-- Player Spotify della traccia -->
     <iframe src="https://open.spotify.com/embed/track/1susvnKQ4rmj5AyAC1YuPR?utm_source=generator"
             allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
             loading="lazy"></iframe>
@@ -66,4 +66,142 @@
   const touchLayer = document.getElementById('touch');
   const jumpBtn = document.getElementById('jumpBtn');
 
-  let gameOver = false, t = 0, score = 0, speed = 2.8; // velocità ini
+  let gameOver = false, t = 0, score = 0, speed = 2.8; // velocità iniziale più lenta
+  const dino = { x:60, y:H-64, w:36, h:42, vy:0, onGround:true };
+  const gravity = 0.55, jumpV = -9.8;
+
+  const stars = [];
+  function spawnStar(){
+    const size = 20 + Math.random() * 10;
+    const gap  = 2000 + Math.random() * 2000; // distanza maggiore: 2–4 secondi
+    const y = H - 24 - size;
+    stars.push({ x: W + 10, y, size });
+    setTimeout(spawnStar, gap);
+  }
+  setTimeout(spawnStar, 1200);
+
+  function drawStar(x,y,r,fill){
+    c.save(); c.translate(x,y); c.beginPath();
+    for(let i=0;i<10;i++){
+      const ang = i * Math.PI/5;
+      const rad = (i%2===0) ? r : r*0.45;
+      c.lineTo(Math.cos(ang)*rad, Math.sin(ang)*rad);
+    }
+    c.closePath(); c.fillStyle = fill; c.shadowColor = '#000'; c.shadowBlur = 12; c.fill();
+    c.restore();
+  }
+
+  function tryJump(){
+    if (gameOver){ reset(); return; }
+    if (dino.onGround){ dino.vy = jumpV; dino.onGround = false; }
+  }
+
+  // Input tastiera
+  window.addEventListener('keydown', e=>{
+    if (e.code === 'Space'){ e.preventDefault(); tryJump(); }
+    if (e.key === 'r' || e.key === 'R'){ reset(); }
+  }, {passive:false});
+
+  // Input touch
+  const touchOpts = {passive:false};
+  ['pointerdown','touchstart','mousedown'].forEach(evt=>{
+    touchLayer.addEventListener(evt, e=>{ e.preventDefault(); tryJump(); }, touchOpts);
+    jumpBtn.addEventListener(evt,     e=>{ e.preventDefault(); tryJump(); }, touchOpts);
+  });
+  document.addEventListener('touchmove', e=>{ e.preventDefault(); }, {passive:false});
+
+  function loop(){
+    requestAnimationFrame(loop);
+    t += 1/60;
+
+    // fisica dinosauro
+    dino.vy += gravity;
+    dino.y  += dino.vy;
+    if (dino.y >= H-64){ dino.y = H-64; dino.vy = 0; dino.onGround = true; }
+
+    // stelle
+    for (const s of stars){ s.x -= speed; }
+    while (stars.length && stars[0].x < -40) stars.shift();
+
+    // collisioni
+    for (const s of stars){
+      const r = s.size;
+      const box = { x: s.x - r, y: s.y - r, w: r*2, h: r*2 };
+      if (rectsOverlap(dino, box)) endGame();
+    }
+
+    // punteggio e difficoltà progressiva
+    if (!gameOver){
+      score += 1;
+      if (score % 600 === 0) speed += 0.15; // aumenta piano piano
+    }
+
+    render();
+  }
+
+  function rectsOverlap(a,b){
+    return a.x < b.x + b.w && a.x + a.w > b.x &&
+           a.y < b.y + b.h && a.y + a.h > b.y;
+  }
+
+  function render(){
+    c.clearRect(0,0,W,H);
+
+    // sfondo stellato
+    for(let i=0;i<90;i++){
+      const x = (i*83 + Math.floor(t*30)) % (W+60) - 30;
+      const y = 30 + (i*17 % 140);
+      c.fillStyle = i%12 ? 'rgba(255,255,255,.08)' : 'rgba(255,255,255,.18)';
+      c.fillRect(x,y,2,2);
+    }
+
+    // terreno
+    c.fillStyle = '#111423';
+    c.fillRect(0, H-22, W, 22);
+
+    // dinosauro
+    c.save();
+    c.translate(dino.x, dino.y);
+    c.fillStyle = '#8ce99a';
+    c.fillRect(0, 0, dino.w, dino.h);
+    c.fillStyle = '#0a0a0a';
+    c.fillRect(dino.w-10, 10, 6, 6);
+    c.restore();
+
+    // stelle ostacolo
+    for (const s of stars) drawStar(s.x, s.y, s.size, '#ffd54a');
+
+    // punteggio
+    scoreEl.textContent = 'Score: ' + Math.floor(score/12);
+
+    // game over
+    if (gameOver){
+      c.fillStyle = 'rgba(0,0,0,.45)';
+      c.fillRect(0,0,W,H);
+      c.fillStyle = '#fff';
+      c.textAlign = 'center';
+      c.font = '700 28px system-ui, sans-serif';
+      c.fillText('GAME OVER', W/2, H/2 - 10);
+      c.font = '16px system-ui, sans-serif';
+      c.fillStyle = '#cbd3ff';
+      c.fillText('Tocca / Spazio o R per ripartire', W/2, H/2 + 22);
+    }
+  }
+
+  function endGame(){
+    if (gameOver) return;
+    gameOver = true;
+    canvas.classList.remove('pulse');
+  }
+
+  function reset(){
+    gameOver = false; score = 0; speed = 2.8; stars.length = 0;
+    dino.x = 60; dino.y = H-64; dino.vy = 0; dino.onGround = true;
+    canvas.classList.add('pulse');
+  }
+
+  loop();
+})();
+</script>
+</body>
+</html>
